@@ -19,8 +19,8 @@ app.get('/', (req, res) => {
 // FAQ Database
 const faqs = {
   'hours': '⏰ We\'re usually around from 8AM - 5PM! Catch us then.',
-  'location': '📍 We roll around Maasin City, Southern Leyte!',
-  'contact': '📧 Hit us up here on Messenger or email kaslodcrew@gmail.com',
+  'location': '📍 We roll around Quezon City, Metro Manila!',
+  'contact': '📧 Hit us up here on Messenger or email kaslodcrew@example.com',
   'services': '🛹 Kaslod Crew offers: Custom rides, crew meetups, and sick skating sessions!',
   'pricing': '💰 Wanna join the crew? Message us for details!',
   'help': 'I can answer questions about: hours, location, contact, services, pricing, crew. Just type any keyword!'
@@ -65,27 +65,39 @@ app.post('/webhook', (req, res) => {
 // Handle incoming messages
 function handleMessage(senderId, messageText) {
   const lowerText = messageText.toLowerCase();
-  let response = "I'm not sure what you mean. Try asking about our crew, hours, location, or services! Type 'help' for options.";
 
-  // Check for greetings first
-  if (lowerText.match(/^(hi|hello|hey|greetings|sup|yo)/)) {
-    response = "Hey there! 👋 Welcome to Kaslod Crew. How can I help you?";
+  // Check for greetings first - show menu with quick replies
+  if (lowerText.match(/^(hi|hello|hey|greetings|sup|yo|start|menu)/)) {
+    sendQuickReply(senderId, "Hey there! 👋 Welcome to Kaslod Crew. What would you like to know?");
+    return;
   }
   // Check for thanks
   else if (lowerText.includes('thank')) {
-    response = "You're very welcome! 🙌 Anything else I can help with?";
+    sendQuickReply(senderId, "You're very welcome! 🙌 Anything else I can help with?");
+    return;
   }
+  // Check for help
+  else if (lowerText.includes('help')) {
+    sendQuickReply(senderId, "Here's what I can help you with. Just click a button below! 👇");
+    return;
+  }
+
   // Check for FAQ keywords
-  else {
-    for (const [key, value] of Object.entries(faqs)) {
-      if (lowerText.includes(key)) {
-        response = value;
-        break;
-      }
+  let response = null;
+  for (const [key, value] of Object.entries(faqs)) {
+    if (lowerText.includes(key)) {
+      response = value;
+      break;
     }
   }
 
-  sendTextMessage(senderId, response);
+  // If we found an answer, send it with quick replies for more questions
+  if (response) {
+    sendQuickReply(senderId, response);
+  } else {
+    // Default response with quick replies
+    sendQuickReply(senderId, "I'm not sure what you mean. Try clicking one of the options below! 👇");
+  }
 }
 
 // Handle postback buttons
@@ -94,16 +106,18 @@ function handlePostback(senderId, payload) {
   
   switch(payload) {
     case 'GET_STARTED':
-      response = "Welcome to Kaslod Crew! 🛹 Let's roll together! Type 'help' to see what I can do.";
-      break;
+      sendButtonTemplate(senderId);
+      return;
     case 'SHOW_FAQS':
-      response = "Here are our FAQs:\n• Hours\n• Location\n• Contact\n• Services\n• Pricing\n\nJust type any keyword!";
-      break;
+      sendQuickReply(senderId, "Here are our most asked questions. Click any button below! 👇");
+      return;
+    case 'CONTACT_US':
+      sendQuickReply(senderId, faqs.contact);
+      return;
     default:
-      response = "Got your message! 🚀 How can I help you?";
+      sendQuickReply(senderId, "Got your message! 🚀 How can I help you?");
+      return;
   }
-  
-  sendTextMessage(senderId, response);
 }
 
 // Send text message
@@ -116,34 +130,74 @@ function sendTextMessage(recipientId, messageText) {
   callSendAPI(messageData);
 }
 
-// Send message with quick replies
-function sendQuickReply(recipientId) {
+// Send message with quick replies (clickable buttons)
+function sendQuickReply(recipientId, messageText) {
   const messageData = {
     recipient: { id: recipientId },
     message: {
-      text: "What would you like to know?",
+      text: messageText,
       quick_replies: [
         {
           content_type: "text",
-          title: "Hours",
+          title: "⏰ Hours",
           payload: "HOURS"
         },
         {
           content_type: "text",
-          title: "Location",
+          title: "📍 Location",
           payload: "LOCATION"
         },
         {
           content_type: "text",
-          title: "Contact",
+          title: "📧 Contact",
           payload: "CONTACT"
         },
         {
           content_type: "text",
-          title: "Services",
+          title: "🛹 Services",
           payload: "SERVICES"
+        },
+        {
+          content_type: "text",
+          title: "💰 Pricing",
+          payload: "PRICING"
         }
       ]
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+// Send button template (for more structured options)
+function sendButtonTemplate(recipientId) {
+  const messageData = {
+    recipient: { id: recipientId },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: "Welcome to Kaslod Crew! 🛹 Choose an option:",
+          buttons: [
+            {
+              type: "postback",
+              title: "📋 View FAQs",
+              payload: "SHOW_FAQS"
+            },
+            {
+              type: "postback",
+              title: "📧 Contact Us",
+              payload: "CONTACT_US"
+            },
+            {
+              type: "web_url",
+              title: "🌐 Visit Website",
+              url: "https://facebook.com/kaslodcrew"
+            }
+          ]
+        }
+      }
     }
   };
 
