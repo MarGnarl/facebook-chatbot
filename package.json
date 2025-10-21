@@ -1,7 +1,7 @@
 {
   "name": "facebook-messenger-chatbot",
-  "version": "1.0.0",
-  "description": "Facebook Messenger chatbot with FAQs",
+  "version": "2.0.0",
+  "description": "Facebook Messenger chatbot with Google Gemini AI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -17,5 +17,14 @@
   },
   "engines": {
     "node": ">=14.0.0"
-  }
+  },
+  "keywords": [
+    "facebook",
+    "messenger",
+    "chatbot",
+    "gemini",
+    "ai"
+  ],
+  "author": "Kaslod Crew",
+  "license": "MIT"
 }
