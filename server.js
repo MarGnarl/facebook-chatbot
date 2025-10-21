@@ -1,4 +1,4 @@
-// server.js
+// server.js - Facebook Chatbot with Google Gemini AI
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
@@ -9,22 +9,101 @@ app.use(bodyParser.json());
 // Configuration
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'my_secure_verify_token_123';
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
+
+// Gemini API endpoint
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+// Business context for Gemini AI
+const BUSINESS_CONTEXT = `You are a friendly assistant for Kaslod Crew, a skateboarding crew in Roxas City, Capiz, Philippines.
+
+Our Info:
+- Hours: 8AM - 5PM
+- Location: Roxas City, Capiz, Western Visayas, Philippines  
+- Services: Custom rides, crew meetups, skating sessions
+- Contact: warionramos@gmail.com, Facebook: facebook.com/kaslodcrew
+
+Keep responses friendly, concise (2-3 sentences), use emojis occasionally 🛹. If you don't know something specific, suggest they contact us directly.`;
+
+// FAQ fallback database
+const faqs = {
+  'hours': '⏰ We\'re usually around from 8AM - 5PM! Catch us then.',
+  'location': '📍 We roll around Roxas City, Capiz, Philippines!',
+  'contact': '📧 Hit us up at warionramos@gmail.com or message us here!',
+  'services': '🛹 Kaslod Crew offers: Custom rides, crew meetups, and sick skating sessions!',
+  'pricing': '💰 Wanna join the crew? Message us for details!',
+  'help': 'I can answer questions about: hours, location, contact, services, pricing, crew. Just ask me anything!'
+};
 
 // Root route
 app.get('/', (req, res) => {
-  res.send('Facebook Chatbot is running!');
+  res.send('🛹 Kaslod Crew Chatbot with Gemini AI is running!');
 });
 
-// FAQ Database
-const faqs = {
-  'hours': '⏰ We\'re usually around from 8AM - 5PM! Catch us then.',
-  'location': '📍 We roll around Quezon City, Metro Manila!',
-  'contact': '📧 Hit us up here on Messenger or email kaslodcrew@example.com',
-  'services': '🛹 Kaslod Crew offers: Custom rides, crew meetups, and sick skating sessions!',
-  'pricing': '💰 Wanna join the crew? Message us for details!',
-  'help': 'I can answer questions about: hours, location, contact, services, pricing, crew. Just type any keyword!'
-};
+// Privacy Policy route
+app.get('/privacy', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Kaslod Crew Chatbot</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1 { color: #1877f2; border-bottom: 2px solid #1877f2; padding-bottom: 10px; }
+        h2 { color: #555; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Privacy Policy</h1>
+    <p><em>Last Updated: October 14, 2025</em></p>
+    <h2>1. Information We Collect</h2>
+    <p>We collect: Facebook User ID, messages sent to the chatbot, and interaction data.</p>
+    <h2>2. How We Use Information</h2>
+    <p>Data is used to respond to inquiries and improve our chatbot service.</p>
+    <h2>3. Data Storage</h2>
+    <p>We do not permanently store messages. All processing is done in real-time.</p>
+    <h2>4. Third-Party Services</h2>
+    <p>We use: Facebook Messenger, Render.com hosting, and Google Gemini AI.</p>
+    <h2>5. Contact</h2>
+    <p>Email: warionramos@gmail.com | Facebook: facebook.com/kaslodcrew</p>
+</body>
+</html>
+  `);
+});
+
+// Terms of Service route
+app.get('/terms', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1 { color: #1877f2; border-bottom: 2px solid #1877f2; padding-bottom: 10px; }
+        h2 { color: #555; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Terms of Service</h1>
+    <p><em>Last Updated: October 14, 2025</em></p>
+    <h2>1. Service Description</h2>
+    <p>Our chatbot provides automated FAQ responses via Facebook Messenger.</p>
+    <h2>2. Acceptable Use</h2>
+    <p>Use the service lawfully and respectfully.</p>
+    <h2>3. Limitation of Liability</h2>
+    <p>We are not liable for response errors or service interruptions.</p>
+    <h2>4. Contact</h2>
+    <p>Email: warionramos@gmail.com</p>
+</body>
+</html>
+  `);
+});
 
 // Webhook verification
 app.get('/webhook', (req, res) => {
@@ -34,10 +113,11 @@ app.get('/webhook', (req, res) => {
 
   if (mode && token === VERIFY_TOKEN) {
     if (mode === 'subscribe') {
-      console.log('Webhook verified!');
+      console.log('✅ Webhook verified!');
       res.status(200).send(challenge);
     }
   } else {
+    console.error('❌ Webhook verification failed');
     res.sendStatus(403);
   }
 });
@@ -62,62 +142,114 @@ app.post('/webhook', (req, res) => {
   }
 });
 
-// Handle incoming messages
-function handleMessage(senderId, messageText) {
+// Handle incoming messages with AI
+async function handleMessage(senderId, messageText) {
   const lowerText = messageText.toLowerCase();
 
-  // Check for greetings first - show menu with quick replies
-  if (lowerText.match(/^(hi|hello|hey|greetings|sup|yo|start|menu)/)) {
-    sendQuickReply(senderId, "Hey there! 👋 Welcome to Kaslod Crew. What would you like to know?");
-    return;
-  }
-  // Check for thanks
-  else if (lowerText.includes('thank')) {
-    sendQuickReply(senderId, "You're very welcome! 🙌 Anything else I can help with?");
-    return;
-  }
-  // Check for help
-  else if (lowerText.includes('help')) {
-    sendQuickReply(senderId, "Here's what I can help you with. Just click a button below! 👇");
+  // Show typing indicator while processing
+  sendTypingIndicator(senderId, true);
+
+  // Check for greetings - show welcome with quick replies
+  if (lowerText.match(/^(hi|hello|hey|greetings|sup|yo|start|menu)$/)) {
+    sendQuickReply(senderId, "Hey there! 👋 Welcome to Kaslod Crew. I'm an AI assistant. What would you like to know?");
     return;
   }
 
-  // Check for FAQ keywords
-  let response = null;
+  // Try AI response first, fallback to FAQs if it fails
+  try {
+    const aiResponse = await getGeminiResponse(messageText);
+    sendQuickReply(senderId, aiResponse);
+  } catch (error) {
+    console.error('⚠️ Gemini AI error:', error.message);
+    // Fallback to FAQ-based response
+    const fallbackResponse = getFallbackResponse(lowerText);
+    sendQuickReply(senderId, fallbackResponse);
+  }
+}
+
+// Get AI response from Google Gemini
+async function getGeminiResponse(userMessage) {
+  if (!GEMINI_API_KEY) {
+    throw new Error('Gemini API key not configured');
+  }
+
+  const prompt = `${BUSINESS_CONTEXT}\n\nUser: ${userMessage}\n\nAssistant:`;
+
+  const requestBody = {
+    contents: [{
+      parts: [{ text: prompt }]
+    }],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 150,
+      topP: 0.9,
+      topK: 40
+    },
+    safetySettings: [
+      {
+        category: "HARM_CATEGORY_HARASSMENT",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        category: "HARM_CATEGORY_HATE_SPEECH",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ]
+  };
+
+  const response = await axios.post(GEMINI_API_URL, requestBody, {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 10000
+  });
+
+  if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+    return response.data.candidates[0].content.parts[0].text.trim();
+  } else {
+    throw new Error('Invalid Gemini response');
+  }
+}
+
+// Fallback response using FAQ keywords
+function getFallbackResponse(messageText) {
+  // Check for thanks
+  if (messageText.includes('thank')) {
+    return "You're very welcome! 🙌 Anything else I can help with?";
+  }
+
+  // Check FAQ keywords
   for (const [key, value] of Object.entries(faqs)) {
-    if (lowerText.includes(key)) {
-      response = value;
-      break;
+    if (messageText.includes(key)) {
+      return value;
     }
   }
-
-  // If we found an answer, send it with quick replies for more questions
-  if (response) {
-    sendQuickReply(senderId, response);
-  } else {
-    // Default response with quick replies
-    sendQuickReply(senderId, "I'm not sure what you mean. Try clicking one of the options below! 👇");
-  }
+  
+  return "I'm here to help! Ask me about our hours, location, services, or anything about Kaslod Crew! 🛹";
 }
 
 // Handle postback buttons
 function handlePostback(senderId, payload) {
-  let response;
-  
   switch(payload) {
     case 'GET_STARTED':
       sendButtonTemplate(senderId);
-      return;
+      break;
     case 'SHOW_FAQS':
-      sendQuickReply(senderId, "Here are our most asked questions. Click any button below! 👇");
-      return;
+      sendQuickReply(senderId, "Here are some things I can help you with! Click a button or just ask me anything. 👇");
+      break;
     case 'CONTACT_US':
       sendQuickReply(senderId, faqs.contact);
-      return;
+      break;
     default:
-      sendQuickReply(senderId, "Got your message! 🚀 How can I help you?");
-      return;
+      sendQuickReply(senderId, "How can I help you today? 🛹");
   }
+}
+
+// Send typing indicator
+function sendTypingIndicator(recipientId, isTyping) {
+  const messageData = {
+    recipient: { id: recipientId },
+    sender_action: isTyping ? 'typing_on' : 'typing_off'
+  };
+  callSendAPI(messageData);
 }
 
 // Send text message
@@ -126,11 +258,10 @@ function sendTextMessage(recipientId, messageText) {
     recipient: { id: recipientId },
     message: { text: messageText }
   };
-
   callSendAPI(messageData);
 }
 
-// Send message with quick replies (clickable buttons)
+// Send message with quick reply buttons
 function sendQuickReply(recipientId, messageText) {
   const messageData = {
     recipient: { id: recipientId },
@@ -165,11 +296,10 @@ function sendQuickReply(recipientId, messageText) {
       ]
     }
   };
-
   callSendAPI(messageData);
 }
 
-// Send button template (for more structured options)
+// Send button template
 function sendButtonTemplate(recipientId) {
   const messageData = {
     recipient: { id: recipientId },
@@ -178,7 +308,7 @@ function sendButtonTemplate(recipientId) {
         type: "template",
         payload: {
           template_type: "button",
-          text: "Welcome to Kaslod Crew! 🛹 Choose an option:",
+          text: "Welcome to Kaslod Crew! 🛹 I'm an AI-powered assistant. Choose an option:",
           buttons: [
             {
               type: "postback",
@@ -192,7 +322,7 @@ function sendButtonTemplate(recipientId) {
             },
             {
               type: "web_url",
-              title: "🌐 Visit Website",
+              title: "🌐 Facebook Page",
               url: "https://facebook.com/kaslodcrew"
             }
           ]
@@ -200,30 +330,25 @@ function sendButtonTemplate(recipientId) {
       }
     }
   };
-
   callSendAPI(messageData);
 }
 
-// Call the Facebook Send API
+// Call Facebook Send API
 function callSendAPI(messageData) {
   axios.post(`https://graph.facebook.com/v18.0/me/messages`, messageData, {
     params: { access_token: PAGE_ACCESS_TOKEN }
   })
-  .then(response => {
-    console.log('✅ Message sent successfully');
+  .then(() => {
+    console.log('✅ Message sent');
   })
   .catch(error => {
-    console.error('❌ Error sending message:', error.response ? error.response.data : error.message);
+    console.error('❌ Send error:', error.response?.data || error.message);
   });
 }
 
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.send('Facebook Chatbot is running!');
-});
-
 // Start server
 app.listen(PORT, () => {
-  console.log(`✅ Facebook Chatbot server is running on port ${PORT}`);
-  console.log(`🔗 Webhook URL: https://your-app.onrender.com/webhook`);
+  console.log(`✅ Kaslod Crew Chatbot running on port ${PORT}`);
+  console.log(`🤖 Gemini AI: ${GEMINI_API_KEY ? '✓ Enabled' : '✗ Not configured'}`);
+  console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
 });
