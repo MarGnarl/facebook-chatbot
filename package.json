@@ -1,6 +1,6 @@
 {
   "name": "facebook-messenger-chatbot",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Facebook Messenger chatbot with Google Gemini AI",
   "main": "server.js",
   "scripts": {
@@ -10,7 +10,11 @@
   "dependencies": {
     "express": "^4.18.2",
     "body-parser": "^1.20.2",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "@google/generative-ai": "^0.21.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   },
   "engines": {
     "node": ">=18.0.0"
