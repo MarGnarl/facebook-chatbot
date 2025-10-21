@@ -1,8 +1,7 @@
-
 // server.js - Facebook Chatbot with Google Gemini AI
 const express = require('express');
 const bodyParser = require('body-parser');
-const axios = require('axios');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 app.use(bodyParser.json());
@@ -13,8 +12,8 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// Gemini API endpoint - UPDATED to use gemini-1.0-pro which is more widely available
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key=${GEMINI_API_KEY}`;
+// Initialize Google Generative AI
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Business context for Gemini AI
 const BUSINESS_CONTEXT = `You are a friendly assistant for Kaslod Crew, a skateboarding crew in Roxas City, Capiz, Philippines.
@@ -168,56 +167,60 @@ async function handleMessage(senderId, messageText) {
   }
 }
 
-// Get AI response from Google Gemini
+// Get AI response from Google Gemini using SDK
 async function getGeminiResponse(userMessage) {
   if (!GEMINI_API_KEY) {
     console.error('❌ Gemini API key missing');
     throw new Error('Gemini API key not configured');
   }
 
-  const prompt = `${BUSINESS_CONTEXT}\n\nUser: ${userMessage}\n\nAssistant:`;
-
-  const requestBody = {
-    contents: [{
-      parts: [{ text: prompt }]
-    }],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 150,
-      topP: 0.9,
-      topK: 40
-    }
-  };
-
   try {
-    console.log(`🤖 Calling Gemini API: ${GEMINI_API_URL.split('?')[0]}`);
+    console.log('🤖 Calling Gemini AI with SDK...');
     
-    const response = await axios.post(GEMINI_API_URL, requestBody, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 10000
-    });
+    // Try different models in order of preference
+    const modelsToTry = [
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-8b',
+      'gemini-1.0-pro',
+      'gemini-pro',
+      'models/gemini-pro'
+    ];
 
-    console.log('✅ Gemini API response received');
+    let lastError = null;
+    
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`🤖 Trying model: ${modelName}`);
+        const model = genAI.getGenerativeModel({ 
+          model: modelName,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 150,
+            topP: 0.9,
+            topK: 40
+          }
+        });
 
-    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      return response.data.candidates[0].content.parts[0].text.trim();
-    } else {
-      console.error('❌ Unexpected Gemini response format:', JSON.stringify(response.data));
-      throw new Error('Invalid Gemini response format');
+        const prompt = `${BUSINESS_CONTEXT}\n\nUser: ${userMessage}\n\nAssistant:`;
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        
+        console.log(`✅ Success with model: ${modelName}`);
+        return text.trim();
+      } catch (error) {
+        lastError = error;
+        console.log(`❌ Model ${modelName} failed: ${error.message}`);
+        // Continue to next model
+      }
     }
+
+    // If all models fail
+    throw lastError || new Error('All Gemini models failed');
+
   } catch (error) {
-    console.error('❌ Gemini API call failed:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data
-    });
-    
-    // Provide more specific error message
-    if (error.response?.status === 404) {
-      throw new Error('Gemini model not found - please check model availability in your region');
-    }
-    throw new Error(`Gemini API error: ${error.response?.status || error.message}`);
+    console.error('❌ All Gemini AI calls failed:', error.message);
+    throw new Error(`Gemini AI unavailable: ${error.message}`);
   }
 }
 
@@ -245,7 +248,7 @@ function handlePostback(senderId, payload) {
       sendButtonTemplate(senderId);
       break;
     case 'SHOW_FAQS':
-      sendQuickReply(senderId, "Here are some things I can help you with! Click a button or just ask me anything. 👇");
+      sendQuickReply(senderId, "Here are some things I can help you with! Click a button or just ask me anywhere.");
       break;
     case 'CONTACT_US':
       sendQuickReply(senderId, faqs.contact);
@@ -347,6 +350,7 @@ function sendButtonTemplate(recipientId) {
 
 // Call Facebook Send API
 function callSendAPI(messageData) {
+  const axios = require('axios');
   axios.post(`https://graph.facebook.com/v18.0/me/messages`, messageData, {
     params: { access_token: PAGE_ACCESS_TOKEN }
   })
@@ -365,6 +369,4 @@ app.listen(PORT, () => {
   console.log(`🔑 Page Token: ${PAGE_ACCESS_TOKEN ? '✓ Set' : '✗ Missing'}`);
   console.log(`🤖 Gemini API Key: ${GEMINI_API_KEY ? '✓ Set' : '✗ Missing'}`);
   console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
-  console.log(`🔗 Gemini API URL: ${GEMINI_API_URL.split('?')[0]}`);
 });
-
