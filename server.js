@@ -12,8 +12,8 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// Gemini API endpoint
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+// Gemini API endpoint - UPDATED to use gemini-pro
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
 // Business context for Gemini AI
 const BUSINESS_CONTEXT = `You are a friendly assistant for Kaslod Crew, a skateboarding crew in Roxas City, Capiz, Philippines.
@@ -167,9 +167,10 @@ async function handleMessage(senderId, messageText) {
   }
 }
 
-// Get AI response from Google Gemini
+// Get AI response from Google Gemini - UPDATED with better error handling
 async function getGeminiResponse(userMessage) {
   if (!GEMINI_API_KEY) {
+    console.error('❌ Gemini API key missing');
     throw new Error('Gemini API key not configured');
   }
 
@@ -184,28 +185,33 @@ async function getGeminiResponse(userMessage) {
       maxOutputTokens: 150,
       topP: 0.9,
       topK: 40
-    },
-    safetySettings: [
-      {
-        category: "HARM_CATEGORY_HARASSMENT",
-        threshold: "BLOCK_MEDIUM_AND_ABOVE"
-      },
-      {
-        category: "HARM_CATEGORY_HATE_SPEECH",
-        threshold: "BLOCK_MEDIUM_AND_ABOVE"
-      }
-    ]
+    }
   };
 
-  const response = await axios.post(GEMINI_API_URL, requestBody, {
-    headers: { 'Content-Type': 'application/json' },
-    timeout: 10000
-  });
+  try {
+    console.log(`🤖 Calling Gemini API: ${GEMINI_API_URL.split('?')[0]}`);
+    
+    const response = await axios.post(GEMINI_API_URL, requestBody, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000
+    });
 
-  if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-    return response.data.candidates[0].content.parts[0].text.trim();
-  } else {
-    throw new Error('Invalid Gemini response');
+    console.log('✅ Gemini API response received');
+
+    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      return response.data.candidates[0].content.parts[0].text.trim();
+    } else {
+      console.error('❌ Unexpected Gemini response format:', JSON.stringify(response.data));
+      throw new Error('Invalid Gemini response format');
+    }
+  } catch (error) {
+    console.error('❌ Gemini API call failed:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    throw new Error(`Gemini API error: ${error.response?.status || error.message}`);
   }
 }
 
@@ -346,11 +352,12 @@ function callSendAPI(messageData) {
   });
 }
 
-// Start server
+// Start server - UPDATED with better environment variable logging
 app.listen(PORT, () => {
   console.log(`✅ Kaslod Crew Chatbot running on port ${PORT}`);
-  console.log(`🤖 Gemini AI: ${GEMINI_API_KEY ? '✓ Enabled' : '✗ Not configured'}`);
+  console.log(`🔑 Verify Token: ${VERIFY_TOKEN ? '✓ Set' : '✗ Missing'}`);
+  console.log(`🔑 Page Token: ${PAGE_ACCESS_TOKEN ? '✓ Set' : '✗ Missing'}`);
+  console.log(`🤖 Gemini API Key: ${GEMINI_API_KEY ? '✓ Set' : '✗ Missing'}`);
   console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
+  console.log(`🔗 Gemini API URL: ${GEMINI_API_URL.split('?')[0]}`);
 });
-
-
