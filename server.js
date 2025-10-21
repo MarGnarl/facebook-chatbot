@@ -1,3 +1,4 @@
+
 // server.js - Facebook Chatbot with Google Gemini AI
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -12,8 +13,8 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// Gemini API endpoint - UPDATED to use gemini-pro
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+// Gemini API endpoint - UPDATED to use gemini-1.0-pro which is more widely available
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key=${GEMINI_API_KEY}`;
 
 // Business context for Gemini AI
 const BUSINESS_CONTEXT = `You are a friendly assistant for Kaslod Crew, a skateboarding crew in Roxas City, Capiz, Philippines.
@@ -167,7 +168,7 @@ async function handleMessage(senderId, messageText) {
   }
 }
 
-// Get AI response from Google Gemini - UPDATED with better error handling
+// Get AI response from Google Gemini
 async function getGeminiResponse(userMessage) {
   if (!GEMINI_API_KEY) {
     console.error('❌ Gemini API key missing');
@@ -211,6 +212,11 @@ async function getGeminiResponse(userMessage) {
       statusText: error.response?.statusText,
       data: error.response?.data
     });
+    
+    // Provide more specific error message
+    if (error.response?.status === 404) {
+      throw new Error('Gemini model not found - please check model availability in your region');
+    }
     throw new Error(`Gemini API error: ${error.response?.status || error.message}`);
   }
 }
@@ -352,7 +358,7 @@ function callSendAPI(messageData) {
   });
 }
 
-// Start server - UPDATED with better environment variable logging
+// Start server
 app.listen(PORT, () => {
   console.log(`✅ Kaslod Crew Chatbot running on port ${PORT}`);
   console.log(`🔑 Verify Token: ${VERIFY_TOKEN ? '✓ Set' : '✗ Missing'}`);
@@ -361,3 +367,4 @@ app.listen(PORT, () => {
   console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
   console.log(`🔗 Gemini API URL: ${GEMINI_API_URL.split('?')[0]}`);
 });
+
