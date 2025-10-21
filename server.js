@@ -29,7 +29,7 @@ Keep responses friendly, concise (2-3 sentences), use emojis occasionally 🛹. 
 // FAQ fallback database
 const faqs = {
   'hours': '⏰ We\'re usually around from 8AM - 5PM! Catch us then.',
-  'location': '📍 We roll around Roxas City, Capiz, Philippines!',
+  'location': '📍 We roll around Maasin City, Southern Leyte, Philippines!',
   'contact': '📧 Hit us up at warionramos@gmail.com or message us here!',
   'services': '🛹 Kaslod Crew offers: Custom rides, crew meetups, and sick skating sessions!',
   'pricing': '💰 Wanna join the crew? Message us for details!',
@@ -352,3 +352,4 @@ app.listen(PORT, () => {
   console.log(`🤖 Gemini AI: ${GEMINI_API_KEY ? '✓ Enabled' : '✗ Not configured'}`);
   console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
 });
+
