@@ -12,16 +12,27 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// Business context for Gemini AI
-const BUSINESS_CONTEXT = `You are a friendly assistant for Kaslod Crew, a skateboarding crew in Roxas City, Capiz, Philippines.
+// Gemini API URL - using v1beta which is more stable
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
-Our Info:
+// Business context for Gemini AI
+const BUSINESS_CONTEXT = `You are a friendly skateboarding assistant for Kaslod Crew in Maasin City, Southern Leyte, Philippines.
+
+Business Details:
+- Name: Kaslod Crew
 - Hours: 8AM - 5PM
-- Location: Roxas City, Capiz, Western Visayas, Philippines  
-- Services: Custom rides, crew meetups, skating sessions
+- Location: Maasin City, Southern Leyte, Philippines
+- Services: Custom skateboard rides, crew meetups, skating sessions, longboarding
 - Contact: warionramos@gmail.com, Facebook: facebook.com/kaslodcrew
 
-Keep responses friendly, concise (2-3 sentences), use emojis occasionally 🛹. If you don't know something specific, suggest they contact us directly.`;
+Instructions:
+- Be friendly and enthusiastic about skateboarding
+- Keep responses SHORT (1-3 sentences max)
+- Use emojis occasionally 🛹
+- If you don't know specific details, suggest contacting us directly
+- Answer questions about skateboarding, longboarding, and our crew
+
+IMPORTANT: Always stay in character as a skateboarding crew assistant.`;
 
 // FAQ fallback database
 const faqs = {
@@ -55,7 +66,7 @@ app.get('/privacy', (req, res) => {
 </head>
 <body>
     <h1>Privacy Policy</h1>
-    <p><em>Last Updated: October 14, 2025</em></p>
+    <p><em>Last Updated: October 22, 2025</em></p>
     <h2>1. Information We Collect</h2>
     <p>We collect: Facebook User ID, messages sent to the chatbot, and interaction data.</p>
     <h2>2. How We Use Information</h2>
@@ -88,7 +99,7 @@ app.get('/terms', (req, res) => {
 </head>
 <body>
     <h1>Terms of Service</h1>
-    <p><em>Last Updated: October 14, 2025</em></p>
+    <p><em>Last Updated: October 22, 2025</em></p>
     <h2>1. Service Description</h2>
     <p>Our chatbot provides automated FAQ responses via Facebook Messenger.</p>
     <h2>2. Acceptable Use</h2>
@@ -141,93 +152,108 @@ app.post('/webhook', (req, res) => {
 
 // Handle incoming messages with AI
 async function handleMessage(senderId, messageText) {
+  console.log(`📨 Received message: "${messageText}" from ${senderId}`);
+  
   const lowerText = messageText.toLowerCase();
 
-  // Show typing indicator while processing
+  // Show typing indicator
   sendTypingIndicator(senderId, true);
 
-  // Check for greetings - show welcome with quick replies
-  if (lowerText.match(/^(hi|hello|hey|greetings|sup|yo|start|menu)$/)) {
-    sendQuickReply(senderId, "Hey there! 👋 Welcome to Kaslod Crew. I'm an AI assistant. What would you like to know?");
+  // Check for simple greetings
+  if (lowerText.match(/^(hi|hello|hey|sup|yo)$/)) {
+    sendQuickReply(senderId, "Hey there! 👋 Welcome to Kaslod Crew. I'm your AI skateboarding assistant! What would you like to know?");
     return;
   }
 
-  // Try AI response first, fallback to FAQs if it fails
-  try {
-    const aiResponse = await getGeminiResponse(messageText);
-    sendQuickReply(senderId, aiResponse);
-  } catch (error) {
-    console.error('⚠️ Gemini AI error:', error.message);
-    // Fallback to FAQ-based response
-    const fallbackResponse = getFallbackResponse(lowerText);
-    sendQuickReply(senderId, fallbackResponse);
+  // Try Gemini AI first
+  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'undefined') {
+    try {
+      console.log('🤖 Calling Gemini AI...');
+      const aiResponse = await getGeminiResponse(messageText);
+      console.log('✅ AI Response:', aiResponse);
+      sendQuickReply(senderId, aiResponse);
+      return;
+    } catch (error) {
+      console.error('❌ Gemini AI failed:', error.message);
+      // Continue to fallback
+    }
+  } else {
+    console.log('⚠️ Gemini API key not set, using fallback');
   }
+
+  // Fallback to FAQ
+  const fallbackResponse = getFallbackResponse(lowerText);
+  console.log('📋 Using fallback response:', fallbackResponse);
+  sendQuickReply(senderId, fallbackResponse);
 }
 
-// Get AI response from Google Gemini with multiple model fallback
+// Get AI response from Google Gemini
 async function getGeminiResponse(userMessage) {
-  if (!GEMINI_API_KEY) {
-    console.error('❌ Gemini API key missing');
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'undefined') {
     throw new Error('Gemini API key not configured');
   }
 
-  const prompt = `${BUSINESS_CONTEXT}\n\nUser: ${userMessage}\n\nAssistant:`;
+  const fullPrompt = `${BUSINESS_CONTEXT}\n\nUser asks: "${userMessage}"\n\nYour response (keep it SHORT and friendly):`;
 
   const requestBody = {
     contents: [{
-      parts: [{ text: prompt }]
+      parts: [{
+        text: fullPrompt
+      }]
     }],
     generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 150,
-      topP: 0.9,
+      temperature: 0.8,
+      maxOutputTokens: 100,
+      topP: 0.95,
       topK: 40
-    }
+    },
+    safetySettings: [
+      {
+        category: "HARM_CATEGORY_HARASSMENT",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        category: "HARM_CATEGORY_HATE_SPEECH",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ]
   };
 
-  // Try multiple model endpoints
-  const modelEndpoints = [
-    'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
-    'https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent',
-    'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent',
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent'
-  ];
+  try {
+    const response = await axios.post(GEMINI_API_URL, requestBody, {
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    });
 
-  let lastError = null;
+    console.log('📥 Gemini API response status:', response.status);
 
-  for (const endpoint of modelEndpoints) {
-    const apiUrl = `${endpoint}?key=${GEMINI_API_KEY}`;
-    
-    try {
-      console.log(`🤖 Trying Gemini endpoint: ${endpoint}`);
-      
-      const response = await axios.post(apiUrl, requestBody, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
-      });
-
-      console.log(`✅ Success with endpoint: ${endpoint}`);
-
-      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return response.data.candidates[0].content.parts[0].text.trim();
-      } else {
-        throw new Error('Invalid Gemini response format');
-      }
-    } catch (error) {
-      lastError = error;
-      console.log(`❌ Endpoint ${endpoint} failed: ${error.response?.status || error.message}`);
-      // Continue to next endpoint
+    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      const aiText = response.data.candidates[0].content.parts[0].text.trim();
+      console.log('✅ Gemini response text:', aiText);
+      return aiText;
+    } else {
+      console.error('❌ Unexpected Gemini response structure:', JSON.stringify(response.data));
+      throw new Error('Invalid response format from Gemini');
+    }
+  } catch (error) {
+    if (error.response) {
+      console.error('❌ Gemini API error response:', error.response.status, error.response.data);
+      throw new Error(`Gemini API error: ${error.response.status}`);
+    } else {
+      console.error('❌ Gemini request error:', error.message);
+      throw error;
     }
   }
-
-  // If all endpoints fail
-  if (lastError) {
-    console.error('❌ All Gemini endpoints failed');
-    throw new Error(`Gemini AI unavailable: ${lastError.response?.status || lastError.message}`);
-  }
-
-  throw new Error('No Gemini endpoints available');
 }
 
 // Fallback response using FAQ keywords
@@ -244,17 +270,24 @@ function getFallbackResponse(messageText) {
     }
   }
   
-  return "I'm here to help! Ask me about our hours, location, services, or anything about Kaslod Crew! 🛹";
+  // Check for longboarding specifically
+  if (messageText.includes('longboard')) {
+    return "🛹 Longboarding is awesome! We do longboard sessions at Kaslod Crew. Want to know about our meetups or how to get started?";
+  }
+  
+  return "I'm here to help with anything skateboarding related! Ask me about our hours, location, services, or just chat about skating! 🛹";
 }
 
 // Handle postback buttons
 function handlePostback(senderId, payload) {
+  console.log(`🔘 Postback received: ${payload}`);
+  
   switch(payload) {
     case 'GET_STARTED':
       sendButtonTemplate(senderId);
       break;
     case 'SHOW_FAQS':
-      sendQuickReply(senderId, "Here are some things I can help you with! Click a button or just ask me anything. 👇");
+      sendQuickReply(senderId, "Here's what I can help you with! Click a button or just ask me anything about skating. 👇");
       break;
     case 'CONTACT_US':
       sendQuickReply(senderId, faqs.contact);
@@ -269,15 +302,6 @@ function sendTypingIndicator(recipientId, isTyping) {
   const messageData = {
     recipient: { id: recipientId },
     sender_action: isTyping ? 'typing_on' : 'typing_off'
-  };
-  callSendAPI(messageData);
-}
-
-// Send text message
-function sendTextMessage(recipientId, messageText) {
-  const messageData = {
-    recipient: { id: recipientId },
-    message: { text: messageText }
   };
   callSendAPI(messageData);
 }
@@ -329,7 +353,7 @@ function sendButtonTemplate(recipientId) {
         type: "template",
         payload: {
           template_type: "button",
-          text: "Welcome to Kaslod Crew! 🛹 I'm an AI-powered assistant. Choose an option:",
+          text: "Welcome to Kaslod Crew! 🛹 I'm your AI skateboarding assistant. How can I help?",
           buttons: [
             {
               type: "postback",
@@ -360,18 +384,21 @@ function callSendAPI(messageData) {
     params: { access_token: PAGE_ACCESS_TOKEN }
   })
   .then(() => {
-    console.log('✅ Message sent');
+    console.log('✅ Message sent successfully');
   })
   .catch(error => {
-    console.error('❌ Send error:', error.response?.data || error.message);
+    console.error('❌ Failed to send message:', error.response?.data || error.message);
   });
 }
 
 // Start server
 app.listen(PORT, () => {
+  console.log(`\n${'='.repeat(60)}`);
   console.log(`✅ Kaslod Crew Chatbot running on port ${PORT}`);
-  console.log(`🔑 Verify Token: ${VERIFY_TOKEN ? '✓ Set' : '✗ Missing'}`);
-  console.log(`🔑 Page Token: ${PAGE_ACCESS_TOKEN ? '✓ Set' : '✗ Missing'}`);
-  console.log(`🤖 Gemini API Key: ${GEMINI_API_KEY ? '✓ Set' : '✗ Missing'}`);
+  console.log(`${'='.repeat(60)}`);
+  console.log(`🔐 Verify Token: ${VERIFY_TOKEN ? '✓ Set' : '✗ Missing'}`);
+  console.log(`🔐 Page Token: ${PAGE_ACCESS_TOKEN ? '✓ Set' : '✗ Missing'}`);
+  console.log(`🤖 Gemini API Key: ${GEMINI_API_KEY && GEMINI_API_KEY !== 'undefined' ? '✓ Set' : '✗ Missing'}`);
   console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
+  console.log(`${'='.repeat(60)}\n`);
 });
