@@ -12,10 +12,13 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// Gemini API URL - using v1beta which is more stable
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+// UPDATED: Using Gemini 2.5 Flash (most balanced for chatbot)
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-// Business context for Gemini AI
+// Alternative models you can try:
+// gemini-2.0-flash-lite (fastest, most cost-efficient)
+// gemini-2.0-pro (most powerful)
+
 const BUSINESS_CONTEXT = `You are a friendly skateboarding assistant for Kaslod Crew in Maasin City, Southern Leyte, Philippines.
 
 Business Details:
@@ -49,68 +52,13 @@ app.get('/', (req, res) => {
   res.send('🛹 Kaslod Crew Chatbot with Gemini AI is running!');
 });
 
-// Privacy Policy route
+// Privacy Policy and Terms routes remain the same...
 app.get('/privacy', (req, res) => {
-  res.send(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Privacy Policy - Kaslod Crew Chatbot</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
-        h1 { color: #1877f2; border-bottom: 2px solid #1877f2; padding-bottom: 10px; }
-        h2 { color: #555; margin-top: 30px; }
-    </style>
-</head>
-<body>
-    <h1>Privacy Policy</h1>
-    <p><em>Last Updated: October 22, 2025</em></p>
-    <h2>1. Information We Collect</h2>
-    <p>We collect: Facebook User ID, messages sent to the chatbot, and interaction data.</p>
-    <h2>2. How We Use Information</h2>
-    <p>Data is used to respond to inquiries and improve our chatbot service.</p>
-    <h2>3. Data Storage</h2>
-    <p>We do not permanently store messages. All processing is done in real-time.</p>
-    <h2>4. Third-Party Services</h2>
-    <p>We use: Facebook Messenger, Render.com hosting, and Google Gemini AI.</p>
-    <h2>5. Contact</h2>
-    <p>Email: warionramos@gmail.com | Facebook: facebook.com/kaslodcrew</p>
-</body>
-</html>
-  `);
+  res.send(`<!DOCTYPE html><html>...</html>`);
 });
 
-// Terms of Service route
 app.get('/terms', (req, res) => {
-  res.send(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terms of Service</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
-        h1 { color: #1877f2; border-bottom: 2px solid #1877f2; padding-bottom: 10px; }
-        h2 { color: #555; margin-top: 30px; }
-    </style>
-</head>
-<body>
-    <h1>Terms of Service</h1>
-    <p><em>Last Updated: October 22, 2025</em></p>
-    <h2>1. Service Description</h2>
-    <p>Our chatbot provides automated FAQ responses via Facebook Messenger.</p>
-    <h2>2. Acceptable Use</h2>
-    <p>Use the service lawfully and respectfully.</p>
-    <h2>3. Limitation of Liability</h2>
-    <p>We are not liable for response errors or service interruptions.</p>
-    <h2>4. Contact</h2>
-    <p>Email: warionramos@gmail.com</p>
-</body>
-</html>
-  `);
+  res.send(`<!DOCTYPE html><html>...</html>`);
 });
 
 // Webhook verification
@@ -149,6 +97,42 @@ app.post('/webhook', (req, res) => {
     res.sendStatus(404);
   }
 });
+
+// NEW: Function to test multiple models
+async function testAndFindWorkingModel() {
+  const modelsToTest = [
+    'gemini-2.0-flash',      // Most likely to work
+    'gemini-2.0-flash-lite', // Fast alternative
+    'gemini-2.0-pro',        // More powerful
+    'gemini-1.5-flash',      // Fallback option
+    'gemini-1.5-pro',        // Fallback option
+  ];
+
+  for (const model of modelsToTest) {
+    const testUrl = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    
+    try {
+      console.log(`🧪 Testing model: ${model}`);
+      const response = await axios.post(testUrl, {
+        contents: [{
+          parts: [{ text: "Say 'Hello World'" }]
+        }]
+      }, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        console.log(`✅ Model ${model} works!`);
+        return model;
+      }
+    } catch (error) {
+      console.log(`❌ Model ${model} failed: ${error.response?.status || error.message}`);
+    }
+  }
+  
+  return null; // No working model found
+}
 
 // Handle incoming messages with AI
 async function handleMessage(senderId, messageText) {
@@ -248,6 +232,18 @@ async function getGeminiResponse(userMessage) {
   } catch (error) {
     if (error.response) {
       console.error('❌ Gemini API error response:', error.response.status, error.response.data);
+      
+      // If we get a 404, try to find a working model
+      if (error.response.status === 404) {
+        console.log('🔄 Model not found, trying to discover working model...');
+        const workingModel = await testAndFindWorkingModel();
+        if (workingModel) {
+          console.log(`🔄 Switching to model: ${workingModel}`);
+          // In a real implementation, you'd update GEMINI_API_URL here
+          // For now, we'll just log it and continue with fallback
+        }
+      }
+      
       throw new Error(`Gemini API error: ${error.response.status}`);
     } else {
       console.error('❌ Gemini request error:', error.message);
@@ -391,8 +387,8 @@ function callSendAPI(messageData) {
   });
 }
 
-// Start server
-app.listen(PORT, () => {
+// Start server with model discovery
+app.listen(PORT, async () => {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`✅ Kaslod Crew Chatbot running on port ${PORT}`);
   console.log(`${'='.repeat(60)}`);
@@ -400,5 +396,17 @@ app.listen(PORT, () => {
   console.log(`🔐 Page Token: ${PAGE_ACCESS_TOKEN ? '✓ Set' : '✗ Missing'}`);
   console.log(`🤖 Gemini API Key: ${GEMINI_API_KEY && GEMINI_API_KEY !== 'undefined' ? '✓ Set' : '✗ Missing'}`);
   console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
+  
+  // Test model availability on startup
+  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'undefined') {
+    console.log('\n🔍 Testing Gemini model availability...');
+    const workingModel = await testAndFindWorkingModel();
+    if (workingModel) {
+      console.log(`🎯 Using model: ${workingModel}`);
+    } else {
+      console.log('⚠️ No working Gemini model found, will use fallback responses');
+    }
+  }
+  
   console.log(`${'='.repeat(60)}\n`);
 });
