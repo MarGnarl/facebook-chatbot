@@ -12,39 +12,163 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// UPDATED: Using Gemini 2.5 Flash (most balanced for chatbot)
+// Using Gemini 2.0 Flash
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-// Alternative models you can try:
-// gemini-2.0-flash-lite (fastest, most cost-efficient)
-// gemini-2.0-pro (most powerful)
+// Enhanced Business Context with Multilingual Support
+const BUSINESS_CONTEXT = `You are a friendly multilingual skateboarding assistant for Kaslod Crew in Maasin City, Southern Leyte, Philippines.
 
-const BUSINESS_CONTEXT = `You are a friendly skateboarding assistant for Kaslod Crew in Maasin City, Southern Leyte, Philippines.
-
-Business Details:
+BUSINESS DETAILS:
 - Name: Kaslod Crew
 - Hours: 8AM - 5PM
 - Location: Maasin City, Southern Leyte, Philippines
-- Services: Custom skateboard rides, crew meetups, skating sessions, longboarding
+- Services: Custom skateboard rides, crew meetups, skating sessions, longboarding, skateboard customization
 - Contact: warionramos@gmail.com, Facebook: facebook.com/kaslodcrew
 
-Instructions:
-- Be friendly and enthusiastic about skateboarding
-- Keep responses SHORT (1-3 sentences max)
-- Use emojis occasionally 🛹
-- If you don't know specific details, suggest contacting us directly
-- Answer questions about skateboarding, longboarding, and our crew
+CREW MEMBERS (Facebook Profiles):
+- Paul Sebastian Macutay (pongpong): https://www.facebook.com/paulsebastian.macutay
+- Ethan Craig: https://www.facebook.com/ethan.craig.351
+- Joseph Delatorre: https://www.facebook.com/joseph.delatorre.99260
+- Jul Alfred Cristobal: https://www.facebook.com/julcristobal
+- Sam Christian: https://www.facebook.com/sam.christian.158923
+- Marion Dave: https://www.facebook.com/warion.poortweny.420/
 
-IMPORTANT: Always stay in character as a skateboarding crew assistant.`;
+LONGBOARDING EXPERTISE:
+We specialize in:
+- Longboard cruising and carving
+- Downhill longboarding
+- Freestyle longboard tricks
+- Longboard dancing
+- Board maintenance and customization
+- Safety gear recommendations
+- Best spots for longboarding in Southern Leyte
 
-// FAQ fallback database
+MULTILINGUAL SUPPORT:
+- Detect the user's language and respond in the same language
+- Support English, Filipino, Cebuano, Spanish, French, German, Japanese, Korean, Chinese
+- Use appropriate emojis and cultural references
+- Be friendly and welcoming to international users
+
+INSTRUCTIONS:
+1. Respond in the same language as the user's message
+2. Keep responses SHORT (1-3 sentences max) but helpful
+3. Use emojis occasionally 🛹🤙
+4. If you don't know specific details, suggest contacting us directly
+5. Be enthusiastic about skateboarding and longboarding
+6. Mention crew members when relevant
+7. For technical longboarding questions, provide detailed advice
+8. Always stay in character as a skateboarding crew assistant
+
+IMPORTANT: If the user asks in a different language, respond in that same language.`;
+
+// Enhanced FAQ with multilingual fallbacks
 const faqs = {
-  'hours': '⏰ We\'re usually around from 8AM - 5PM! Catch us then.',
-  'location': '📍 We roll around Maasin City, Southern Leyte, Philippines!',
-  'contact': '📧 Hit us up at warionramos@gmail.com or message us here!',
-  'services': '🛹 Kaslod Crew offers: Custom rides, crew meetups, and sick skating sessions!',
-  'pricing': '💰 Wanna join the crew? Message us for details!',
-  'help': 'I can answer questions about: hours, location, contact, services, pricing, crew. Just ask me anything!'
+  'hours': {
+    en: '⏰ We\'re usually around from 8AM - 5PM! Catch us then.',
+    fil: '⏰ Karaniwang nasa 8AM - 5PM kami! Abangan kami.',
+    ceb: '⏰ Kasagarang naa mi gikan 8AM - 5PM! Abti mi.'
+  },
+  'location': {
+    en: '📍 We roll around Maasin City, Southern Leyte, Philippines!',
+    fil: '📍 Gumagala kami sa Maasin City, Southern Leyte, Philippines!',
+    ceb: '📍 Naglibod mi sa Maasin City, Southern Leyte, Philippines!'
+  },
+  'contact': {
+    en: '📧 Hit us up at warionramos@gmail.com or message us here!',
+    fil: '📧 Mag-message sa warionramos@gmail.com o dito mismo!',
+    ceb: '📧 Kontaka mi sa warionramos@gmail.com o dinhi mismo!'
+  },
+  'services': {
+    en: '🛹 Kaslod Crew offers: Custom rides, crew meetups, skating sessions, longboarding lessons!',
+    fil: '🛹 Nag-aalok ang Kaslod Crew: Custom rides, crew meetups, skating sessions, longboarding lessons!',
+    ceb: '🛹 Naghatag ang Kaslod Crew: Custom rides, crew meetups, skating sessions, longboarding lessons!'
+  },
+  'pricing': {
+    en: '💰 Wanna join the crew or get lessons? Message us for details!',
+    fil: '💰 Gusto sumali sa crew o kumuha ng lessons? Message us for details!',
+    ceb: '💰 Gusto mo apil sa crew o kuha lessons? Message us for details!'
+  },
+  'crew': {
+    en: '👥 Our crew: Paul, Ethan, Joseph, Jul, Sam, Marion! Check our Facebook for more info! 🛹',
+    fil: '👥 Ang aming crew: Paul, Ethan, Joseph, Jul, Sam, Marion! Check our Facebook for more info! 🛹',
+    ceb: '👥 Among crew: Paul, Ethan, Joseph, Jul, Sam, Marion! Check our Facebook for more info! 🛹'
+  },
+  'longboarding': {
+    en: '🛹 We LOVE longboarding! Cruising, downhill, dancing - we do it all! Ask us about techniques, gear, or best spots!',
+    fil: '🛹 Mahal namin ang longboarding! Cruising, downhill, dancing - ginagawa namin lahat! Tanong lang about techniques, gear, or best spots!',
+    ceb: '🛹 Gihigugma namo ang longboarding! Cruising, downhill, dancing - among gibuhat tanan! Pangutana about techniques, gear, or best spots!'
+  }
+};
+
+// Language detection function
+function detectLanguage(text) {
+  const lowerText = text.toLowerCase();
+  
+  // Filipino/Tagalog detection
+  if (lowerText.match(/(ako|ikaw|sila|kami|tayo|mo|ko|natin|ka|ba|po|opo|hindi|oo|sige|mabuhay)/)) {
+    return 'fil';
+  }
+  
+  // Cebuano/Bisaya detection
+  if (lowerText.match(/(ako|ikaw|sila|kami|ato|imo|nako|nato|ka|ba|dili|oo|sige|bai|istorya)/)) {
+    return 'ceb';
+  }
+  
+  // Spanish detection
+  if (lowerText.match(/(hola|gracias|por favor|buenos|días|noche|adiós|sí|no)/)) {
+    return 'es';
+  }
+  
+  // French detection
+  if (lowerText.match(/(bonjour|merci|s'il vous|plaît|oui|non|au revoir)/)) {
+    return 'fr';
+  }
+  
+  // Japanese detection
+  if (lowerText.match(/(こんにちは|ありがとう|すみません|はい|いいえ|おはよう)/)) {
+    return 'ja';
+  }
+  
+  // Korean detection
+  if (lowerText.match(/(안녕|감사|합니다|네|아니요|주세요)/)) {
+    return 'ko';
+  }
+  
+  // Chinese detection
+  if (lowerText.match(/(你好|谢谢|对不起|是的|不|请)/)) {
+    return 'zh';
+  }
+  
+  // German detection
+  if (lowerText.match(/(hallo|danke|bitte|ja|nein|tschüss)/)) {
+    return 'de';
+  }
+  
+  return 'en'; // default to English
+}
+
+// Enhanced longboarding knowledge base
+const LONGBOARDING_KNOWLEDGE = {
+  'basics': {
+    en: "🛹 Longboarding Basics: Start with a cruiser board, learn to push and footbrake first. Wear helmet & pads! We can teach you!",
+    fil: "🛹 Longboarding Basics: Magsimula sa cruiser board, matutong mag-push at footbrake. Suot ang helmet & pads! Kami ang magtuturo!",
+    ceb: "🛹 Longboarding Basics: Sugod sa cruiser board, kat-on og push ug footbrake. Sul-ob ug helmet & pads! Kami ang magtudlo!"
+  },
+  'tricks': {
+    en: "🤙 Longboard Tricks: Start with carving, then learn sliding and dancing! We host workshops every weekend!",
+    fil: "🤙 Longboard Tricks: Magsimula sa carving, pagkatapos matuto ng sliding at dancing! May workshops kami every weekend!",
+    ceb: "🤙 Longboard Tricks: Sugod sa carving, unya kat-on og sliding ug dancing! Naay workshops every weekend!"
+  },
+  'gear': {
+    en: "⚙️ Longboard Gear: We recommend Sector 9 or Loaded boards, Orangatang wheels, and Bones bearings. We can help you choose!",
+    fil: "⚙️ Longboard Gear: Rekomendado namin ang Sector 9 o Loaded boards, Orangatang wheels, at Bones bearings. Tutulungan ka namin pumili!",
+    ceb: "⚙️ Longboard Gear: Girekomenda namo ang Sector 9 o Loaded boards, Orangatang wheels, ug Bones bearings. Tabangan ka namo pagpili!"
+  },
+  'spots': {
+    en: "📍 Best Spots: Maasin Boulevard for cruising, Tagnipa Road for downhill, City Plaza for dancing! Join us for sessions!",
+    fil: "📍 Best Spots: Maasin Boulevard para sa cruising, Tagnipa Road para sa downhill, City Plaza para sa dancing! Sumama sa amin!",
+    ceb: "📍 Best Spots: Maasin Boulevard para sa cruising, Tagnipa Road para sa downhill, City Plaza para sa dancing! Apil namo!"
+  }
 };
 
 // Root route
@@ -52,11 +176,12 @@ app.get('/', (req, res) => {
   res.send('🛹 Kaslod Crew Chatbot with Gemini AI is running!');
 });
 
-// Privacy Policy and Terms routes remain the same...
+// Privacy Policy route (keep your existing HTML)
 app.get('/privacy', (req, res) => {
   res.send(`<!DOCTYPE html><html>...</html>`);
 });
 
+// Terms of Service route (keep your existing HTML)
 app.get('/terms', (req, res) => {
   res.send(`<!DOCTYPE html><html>...</html>`);
 });
@@ -98,86 +223,70 @@ app.post('/webhook', (req, res) => {
   }
 });
 
-// NEW: Function to test multiple models
-async function testAndFindWorkingModel() {
-  const modelsToTest = [
-    'gemini-2.0-flash',      // Most likely to work
-    'gemini-2.0-flash-lite', // Fast alternative
-    'gemini-2.0-pro',        // More powerful
-    'gemini-1.5-flash',      // Fallback option
-    'gemini-1.5-pro',        // Fallback option
-  ];
-
-  for (const model of modelsToTest) {
-    const testUrl = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-    
-    try {
-      console.log(`🧪 Testing model: ${model}`);
-      const response = await axios.post(testUrl, {
-        contents: [{
-          parts: [{ text: "Say 'Hello World'" }]
-        }]
-      }, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
-      });
-
-      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        console.log(`✅ Model ${model} works!`);
-        return model;
-      }
-    } catch (error) {
-      console.log(`❌ Model ${model} failed: ${error.response?.status || error.message}`);
-    }
-  }
-  
-  return null; // No working model found
-}
-
-// Handle incoming messages with AI
+// Enhanced message handler with retry logic
 async function handleMessage(senderId, messageText) {
   console.log(`📨 Received message: "${messageText}" from ${senderId}`);
   
   const lowerText = messageText.toLowerCase();
+  const detectedLanguage = detectLanguage(messageText);
 
   // Show typing indicator
   sendTypingIndicator(senderId, true);
 
-  // Check for simple greetings
-  if (lowerText.match(/^(hi|hello|hey|sup|yo)$/)) {
-    sendQuickReply(senderId, "Hey there! 👋 Welcome to Kaslod Crew. I'm your AI skateboarding assistant! What would you like to know?");
-    return;
+  // Check for simple greetings in multiple languages
+  const greetings = {
+    en: /^(hi|hello|hey|sup|yo|what's up|howdy)$/i,
+    fil: /^(kamusta|musta|hey|hoy)$/i,
+    ceb: /^(kamusta|musta|hey|hoy|bai)$/i,
+    es: /^(hola|buenos|días)$/i,
+    fr: /^(bonjour|salut)$/i
+  };
+
+  let isGreeting = false;
+  for (const [lang, pattern] of Object.entries(greetings)) {
+    if (messageText.match(pattern)) {
+      isGreeting = true;
+      const greetingResponses = {
+        en: "Hey there! 👋 Welcome to Kaslod Crew. I'm your multilingual skateboarding assistant! What would you like to know?",
+        fil: "Kamusta! 👋 Welcome sa Kaslod Crew. Ako ang inyong multilingual skateboarding assistant! Ano ang gusto mong malaman?",
+        ceb: "Kamusta! 👋 Welcome sa Kaslod Crew. Ako ang inyong multilingual skateboarding assistant! Unsay gusto nimo mahibal-an?",
+        es: "¡Hola! 👋 Bienvenido a Kaslod Crew. ¡Soy tu asistente multilingüe de skateboarding! ¿Qué te gustaría saber?",
+        fr: "Bonjour! 👋 Bienvenue à Kaslod Crew. Je suis votre assistant multilingue de skateboard! Que voudriez-vous savoir?"
+      };
+      sendQuickReply(senderId, greetingResponses[lang] || greetingResponses.en, detectedLanguage);
+      return;
+    }
   }
 
-  // Try Gemini AI first
+  // Try Gemini AI first with retry logic
   if (GEMINI_API_KEY && GEMINI_API_KEY !== 'undefined') {
     try {
       console.log('🤖 Calling Gemini AI...');
-      const aiResponse = await getGeminiResponse(messageText);
+      const aiResponse = await getGeminiResponseWithRetry(messageText, 2); // 2 retries
       console.log('✅ AI Response:', aiResponse);
-      sendQuickReply(senderId, aiResponse);
+      sendQuickReply(senderId, aiResponse, detectedLanguage);
       return;
     } catch (error) {
-      console.error('❌ Gemini AI failed:', error.message);
+      console.error('❌ Gemini AI failed after retries:', error.message);
       // Continue to fallback
     }
   } else {
     console.log('⚠️ Gemini API key not set, using fallback');
   }
 
-  // Fallback to FAQ
-  const fallbackResponse = getFallbackResponse(lowerText);
+  // Enhanced fallback with multilingual support
+  const fallbackResponse = getEnhancedFallbackResponse(messageText, detectedLanguage);
   console.log('📋 Using fallback response:', fallbackResponse);
-  sendQuickReply(senderId, fallbackResponse);
+  sendQuickReply(senderId, fallbackResponse, detectedLanguage);
 }
 
-// Get AI response from Google Gemini
-async function getGeminiResponse(userMessage) {
+// Enhanced Gemini function with retry logic
+async function getGeminiResponseWithRetry(userMessage, maxRetries = 2) {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'undefined') {
     throw new Error('Gemini API key not configured');
   }
 
-  const fullPrompt = `${BUSINESS_CONTEXT}\n\nUser asks: "${userMessage}"\n\nYour response (keep it SHORT and friendly):`;
+  const fullPrompt = `${BUSINESS_CONTEXT}\n\nUser asks: "${userMessage}"\n\nYour response (keep it SHORT and friendly, respond in user's language):`;
 
   const requestBody = {
     contents: [{
@@ -187,7 +296,7 @@ async function getGeminiResponse(userMessage) {
     }],
     generationConfig: {
       temperature: 0.8,
-      maxOutputTokens: 100,
+      maxOutputTokens: 150, // Slightly increased for multilingual
       topP: 0.95,
       topK: 40
     },
@@ -211,67 +320,103 @@ async function getGeminiResponse(userMessage) {
     ]
   };
 
-  try {
-    const response = await axios.post(GEMINI_API_URL, requestBody, {
-      headers: { 
-        'Content-Type': 'application/json'
-      },
-      timeout: 15000
-    });
-
-    console.log('📥 Gemini API response status:', response.status);
-
-    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      const aiText = response.data.candidates[0].content.parts[0].text.trim();
-      console.log('✅ Gemini response text:', aiText);
-      return aiText;
-    } else {
-      console.error('❌ Unexpected Gemini response structure:', JSON.stringify(response.data));
-      throw new Error('Invalid response format from Gemini');
-    }
-  } catch (error) {
-    if (error.response) {
-      console.error('❌ Gemini API error response:', error.response.status, error.response.data);
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      console.log(`🔄 Gemini API attempt ${attempt}/${maxRetries + 1}`);
       
-      // If we get a 404, try to find a working model
-      if (error.response.status === 404) {
-        console.log('🔄 Model not found, trying to discover working model...');
-        const workingModel = await testAndFindWorkingModel();
-        if (workingModel) {
-          console.log(`🔄 Switching to model: ${workingModel}`);
-          // In a real implementation, you'd update GEMINI_API_URL here
-          // For now, we'll just log it and continue with fallback
-        }
+      const response = await axios.post(GEMINI_API_URL, requestBody, {
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      });
+
+      console.log('📥 Gemini API response status:', response.status);
+
+      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const aiText = response.data.candidates[0].content.parts[0].text.trim();
+        console.log('✅ Gemini response text:', aiText);
+        return aiText;
+      } else {
+        console.error('❌ Unexpected Gemini response structure:', JSON.stringify(response.data));
+        throw new Error('Invalid response format from Gemini');
       }
-      
-      throw new Error(`Gemini API error: ${error.response.status}`);
-    } else {
-      console.error('❌ Gemini request error:', error.message);
+    } catch (error) {
+      if (error.response && error.response.status === 503 && attempt <= maxRetries) {
+        console.log(`⏳ Model overloaded, retrying in ${attempt * 2} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+        continue;
+      }
       throw error;
     }
   }
 }
 
-// Fallback response using FAQ keywords
-function getFallbackResponse(messageText) {
-  // Check for thanks
-  if (messageText.includes('thank')) {
-    return "You're very welcome! 🙌 Anything else I can help with?";
+// Enhanced multilingual fallback response
+function getEnhancedFallbackResponse(messageText, language = 'en') {
+  const lowerText = messageText.toLowerCase();
+
+  // Check for thanks in multiple languages
+  const thanksPatterns = {
+    en: /thank|thanks|ty|cheers/i,
+    fil: /salamat|salamat po/i,
+    ceb: /salamat|salamat daan/i,
+    es: /gracias/i,
+    fr: /merci/i
+  };
+
+  for (const [lang, pattern] of Object.entries(thanksPatterns)) {
+    if (lowerText.match(pattern)) {
+      const responses = {
+        en: "You're very welcome! 🙌 Anything else I can help with?",
+        fil: "Walang anuman! 🙌 May iba pa ba akong matutulong?",
+        ceb: "Walay sapayan! 🙌 Naay lain nga matabangan nako?",
+        es: "¡De nada! 🙌 ¿Hay algo más en lo que pueda ayudar?",
+        fr: "De rien! 🙌 Y a-t-il autre chose avec laquelle je peux vous aider?"
+      };
+      return responses[language] || responses.en;
+    }
+  }
+
+  // Enhanced longboarding queries
+  if (lowerText.includes('longboard') || lowerText.includes('long boarding')) {
+    if (lowerText.includes('basic') || lowerText.includes('beginner') || lowerText.includes('start')) {
+      return LONGBOARDING_KNOWLEDGE.basics[language] || LONGBOARDING_KNOWLEDGE.basics.en;
+    }
+    if (lowerText.includes('trick') || lowerText.includes('slide') || lowerText.includes('dance')) {
+      return LONGBOARDING_KNOWLEDGE.tricks[language] || LONGBOARDING_KNOWLEDGE.tricks.en;
+    }
+    if (lowerText.includes('gear') || lowerText.includes('equipment') || lowerText.includes('board')) {
+      return LONGBOARDING_KNOWLEDGE.gear[language] || LONGBOARDING_KNOWLEDGE.gear.en;
+    }
+    if (lowerText.includes('spot') || lowerText.includes('place') || lowerText.includes('location')) {
+      return LONGBOARDING_KNOWLEDGE.spots[language] || LONGBOARDING_KNOWLEDGE.spots.en;
+    }
+    return faqs.longboarding[language] || faqs.longboarding.en;
+  }
+
+  // Crew member queries
+  if (lowerText.includes('crew') || lowerText.includes('member') || lowerText.match(/(paul|ethan|joseph|jul|sam|marion)/i)) {
+    return faqs.crew[language] || faqs.crew.en;
   }
 
   // Check FAQ keywords
-  for (const [key, value] of Object.entries(faqs)) {
-    if (messageText.includes(key)) {
-      return value;
+  for (const [key, translations] of Object.entries(faqs)) {
+    if (lowerText.includes(key)) {
+      return translations[language] || translations.en;
     }
   }
-  
-  // Check for longboarding specifically
-  if (messageText.includes('longboard')) {
-    return "🛹 Longboarding is awesome! We do longboard sessions at Kaslod Crew. Want to know about our meetups or how to get started?";
-  }
-  
-  return "I'm here to help with anything skateboarding related! Ask me about our hours, location, services, or just chat about skating! 🛹";
+
+  // Default multilingual response
+  const defaultResponses = {
+    en: "I'm here to help with anything skateboarding related! Ask me about our hours, location, services, crew members, or just chat about skating! 🛹",
+    fil: "Nandito ako para tumulong sa lahat ng bagay tungkol sa skateboarding! Magtanong ka about sa oras, lokasyon, serbisyo, crew members, o kumustahan lang tungkol sa skating! 🛹",
+    ceb: "Ania ko para motabang sa bisan unsa nga skateboarding! Pangutana bahin sa oras, location, services, crew members, o pakig-chat lang bahin sa skating! 🛹",
+    es: "¡Estoy aquí para ayudar con todo lo relacionado con el skateboarding! ¡Pregúntame sobre nuestros horarios, ubicación, servicios, miembros del equipo o simplemente charla sobre el skate! 🛹",
+    fr: "Je suis là pour aider avec tout ce qui concerne le skateboard! Demandez-moi nos heures, emplacement, services, membres de l'équipe ou discutez simplement de skate! 🛹"
+  };
+
+  return defaultResponses[language] || defaultResponses.en;
 }
 
 // Handle postback buttons
@@ -283,13 +428,13 @@ function handlePostback(senderId, payload) {
       sendButtonTemplate(senderId);
       break;
     case 'SHOW_FAQS':
-      sendQuickReply(senderId, "Here's what I can help you with! Click a button or just ask me anything about skating. 👇");
+      sendQuickReply(senderId, "Here's what I can help you with! Click a button or just ask me anything about skating. 👇", 'en');
       break;
     case 'CONTACT_US':
-      sendQuickReply(senderId, faqs.contact);
+      sendQuickReply(senderId, faqs.contact.en, 'en');
       break;
     default:
-      sendQuickReply(senderId, "How can I help you today? 🛹");
+      sendQuickReply(senderId, "How can I help you today? 🛹", 'en');
   }
 }
 
@@ -302,8 +447,37 @@ function sendTypingIndicator(recipientId, isTyping) {
   callSendAPI(messageData);
 }
 
-// Send message with quick reply buttons
-function sendQuickReply(recipientId, messageText) {
+// Enhanced send message with multilingual quick replies
+function sendQuickReply(recipientId, messageText, language = 'en') {
+  const quickReplyTitles = {
+    en: {
+      hours: "⏰ Hours",
+      location: "📍 Location", 
+      contact: "📧 Contact",
+      services: "🛹 Services",
+      crew: "👥 Crew",
+      longboard: "🏄 Longboarding"
+    },
+    fil: {
+      hours: "⏰ Oras",
+      location: "📍 Lokasyon",
+      contact: "📧 Kontak", 
+      services: "🛹 Serbisyo",
+      crew: "👥 Crew",
+      longboard: "🏄 Longboarding"
+    },
+    ceb: {
+      hours: "⏰ Oras",
+      location: "📍 Location",
+      contact: "📧 Kontak",
+      services: "🛹 Serbisyo",
+      crew: "👥 Crew", 
+      longboard: "🏄 Longboarding"
+    }
+  };
+
+  const titles = quickReplyTitles[language] || quickReplyTitles.en;
+
   const messageData = {
     recipient: { id: recipientId },
     message: {
@@ -311,28 +485,33 @@ function sendQuickReply(recipientId, messageText) {
       quick_replies: [
         {
           content_type: "text",
-          title: "⏰ Hours",
+          title: titles.hours,
           payload: "HOURS"
         },
         {
           content_type: "text",
-          title: "📍 Location",
+          title: titles.location,
           payload: "LOCATION"
         },
         {
           content_type: "text",
-          title: "📧 Contact",
+          title: titles.contact,
           payload: "CONTACT"
         },
         {
           content_type: "text",
-          title: "🛹 Services",
+          title: titles.services,
           payload: "SERVICES"
         },
         {
           content_type: "text",
-          title: "💰 Pricing",
-          payload: "PRICING"
+          title: titles.crew,
+          payload: "CREW"
+        },
+        {
+          content_type: "text",
+          title: titles.longboard,
+          payload: "LONGBOARD"
         }
       ]
     }
@@ -340,7 +519,7 @@ function sendQuickReply(recipientId, messageText) {
   callSendAPI(messageData);
 }
 
-// Send button template
+// Send button template (keep your existing function)
 function sendButtonTemplate(recipientId) {
   const messageData = {
     recipient: { id: recipientId },
@@ -374,7 +553,7 @@ function sendButtonTemplate(recipientId) {
   callSendAPI(messageData);
 }
 
-// Call Facebook Send API
+// Call Facebook Send API (keep your existing function)
 function callSendAPI(messageData) {
   axios.post(`https://graph.facebook.com/v18.0/me/messages`, messageData, {
     params: { access_token: PAGE_ACCESS_TOKEN }
@@ -387,26 +566,15 @@ function callSendAPI(messageData) {
   });
 }
 
-// Start server with model discovery
-app.listen(PORT, async () => {
+// Start server
+app.listen(PORT, () => {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`✅ Kaslod Crew Chatbot running on port ${PORT}`);
+  console.log(`🌍 MULTILINGUAL SUPPORT: English, Filipino, Cebuano + more!`);
   console.log(`${'='.repeat(60)}`);
   console.log(`🔐 Verify Token: ${VERIFY_TOKEN ? '✓ Set' : '✗ Missing'}`);
   console.log(`🔐 Page Token: ${PAGE_ACCESS_TOKEN ? '✓ Set' : '✗ Missing'}`);
   console.log(`🤖 Gemini API Key: ${GEMINI_API_KEY && GEMINI_API_KEY !== 'undefined' ? '✓ Set' : '✗ Missing'}`);
   console.log(`🔗 Webhook: https://facebook-chatbot-5mpc.onrender.com/webhook`);
-  
-  // Test model availability on startup
-  if (GEMINI_API_KEY && GEMINI_API_KEY !== 'undefined') {
-    console.log('\n🔍 Testing Gemini model availability...');
-    const workingModel = await testAndFindWorkingModel();
-    if (workingModel) {
-      console.log(`🎯 Using model: ${workingModel}`);
-    } else {
-      console.log('⚠️ No working Gemini model found, will use fallback responses');
-    }
-  }
-  
   console.log(`${'='.repeat(60)}\n`);
 });
